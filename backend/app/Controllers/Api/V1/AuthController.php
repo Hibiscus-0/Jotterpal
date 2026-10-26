@@ -3,71 +3,66 @@
 namespace App\Controllers\Api\V1;
 
 use App\Controllers\BaseController;
-use App\Entities\User;
-use App\Libraries\TokenService;
+use App\DTOs\Requests\LoginRequest;
+use App\DTOs\Requests\RegisterRequest;
+use App\DTOs\Responses\LoginResponse;
+use App\DTOs\Responses\RegisterResponse;
+use App\Exceptions\LoginFailedException;
 use App\Models\UserModel;
+use App\Services\AuthService;
+use App\Validations\LoginRequestValidation;
+use App\Validations\RegisterRequestValidation;
 use CodeIgniter\API\ResponseTrait;
-use CodeIgniter\HTTP\ResponseInterface;
 
 class AuthController extends BaseController
 {
     use ResponseTrait;
 
+    private AuthService $authService;
+
+    public function __construct()
+    {
+        $this->authService = new AuthService();
+    }
+
     public function register()
     {
-        $data = $this->request->getJSON(true) ?? [];
-        $data['email'] = strtolower(trim((string) ($data['email'] ?? '')));
+        $request = RegisterRequest::fromArray(
+            $this->request->getJSON(true) ?? []
+        );
 
-        $rules = [
-            'name'     => 'required|min_length[2]|max_length[100]',
-            'email'    => 'required|valid_email|max_length[150]|is_unique[users.email]',
-            'password' => 'required|min_length[8]|max_length[72]',
-        ];
+        $errors = (new RegisterRequestValidation())->validate($request);
 
-        if (! $this->validateData($data, $rules)) {
-            return $this->failValidationErrors($this->validator->getErrors());
+        if (! empty($errors)) {
+            return $this->failValidationErrors($errors);
         }
 
-        $users = new UserModel();
-        $users->save(new User([
-            'name'     => $data['name'],
-            'email'    => $data['email'],
-            'password' => $data['password'],
-            'role'     => 'user', // never taken from the request
-        ]));
-
-        $user = $users->find($users->getInsertID());
+        $this->authService->register($request);
 
         return $this->respondCreated([
-            'data' => $user->toSafeArray(),
-            'auth' => (new TokenService())->issueAccessToken($user->id, $user->role),
+            RegisterResponse::create()->toArray()
         ]);
     }
 
     public function login() {
-        $data = $this->request->getJSON(true) ?? [];
+        $request = LoginRequest::fromArray(
+            $this->request->getJSON(true) ?? []
+        );
 
-        $email = strtolower(trim((string) ($data['email'] ?? '')));
-        $pass  = (string) ($data['password'] ?? '');
+        $errors = (new LoginRequestValidation())->validate($request);
 
-        $user = (new UserModel())->where('email', $email)->first();
-
-        if (! $user || ! password_verify($pass, $user->password)) {
-            return $this->failUnauthorized('Unvalid email or password');
+        if (! empty($errors)) {
+            return $this->failValidationErrors($errors);
         }
 
-        return $this->respond([
-            'data' => $user->toSafeArray(),
-            'auth' => (new TokenService())->issueAccessToken($user->id, $user->role),
-        ]);
-    }
+        try {
+            $token = $this->authService->login($request);
 
-    public function me() {
-        $id = (int) $this->request->getHeaderLine('X-Auth-User-Id');
-        $user = (new UserModel())->find($id);
-
-        return $user 
-            ? $this->respond(['data' => $user->toSafeArray()]) 
-            : $this->failNotFound('User not found!');
+            return $this->respond([
+                LoginResponse::create($token)->toArray()
+            ]);
+        } catch (LoginFailedException $e) {
+            return $this->failUnauthorized($e->getMessage());
+        }
     }
 }
