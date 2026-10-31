@@ -5,6 +5,8 @@ namespace App\Controllers\Api\V1;
 use App\Controllers\BaseController;
 use App\DTOs\Requests\LoginRequest;
 use App\DTOs\Requests\RegisterRequest;
+use App\DTOs\Responses\BaseResponse;
+use App\DTOs\Responses\GenericResponse;
 use App\DTOs\Responses\LoginResponse;
 use App\DTOs\Responses\RegisterResponse;
 use App\Exceptions\LoginFailedException;
@@ -13,6 +15,7 @@ use App\Services\AuthService;
 use App\Validations\LoginRequestValidation;
 use App\Validations\RegisterRequestValidation;
 use CodeIgniter\API\ResponseTrait;
+use Exception;
 
 class AuthController extends BaseController
 {
@@ -62,6 +65,19 @@ class AuthController extends BaseController
                 LoginResponse::create($token)->toArray()
             ]);
         } catch (LoginFailedException $e) {
+            return $this->failUnauthorized($e->getMessage());
+        }
+    }
+
+    public function logout() {
+        $authHeader = $this->request->getHeaderLine('Authorization');
+
+        try {
+            $this->authService->logout($authHeader);
+            return $this->respond([
+                GenericResponse::create()->toArray()
+            ]);
+        } catch (Exception $e) {
             return $this->failUnauthorized($e->getMessage());
         }
     }

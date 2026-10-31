@@ -12,6 +12,7 @@ services:
     build:
       context: .
       dockerfile: docker/ci4/Dockerfile
+    user: "${UID}:${GID}"
     volumes:
       - ./backend:/var/www/html
     environment:
@@ -23,7 +24,8 @@ services:
       database.default.DBDriver: MySQLi
       database.default.port: ${DB_PORT:-3306}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      JWT_TTL: ${JWT_TTL:-3600}
+      ACCESS_TOKEN_EXPIRATION: ${ACCESS_TOKEN_EXPIRATION:-3600}
+      REFRESH_TOKEN_EXPIRATION: ${REFRESH_TOKEN_EXPIRATION:-2592000}
     depends_on:
       - db
 

@@ -11,6 +11,7 @@ use App\Libraries\TokenService;
 use App\Models\UserModel;
 use App\Repositories\UserRepository;
 use CodeIgniter\Config\BaseService;
+use Exception;
 
 class AuthService extends BaseService
 {
@@ -38,14 +39,39 @@ class AuthService extends BaseService
 
     public function login(LoginRequest $request): TokenResponse
     {
-
         $user = $this->userRepository->findByEmail($request->getEmail());
 
         if (! $user || ! password_verify($request->getPassword(), $user->password)) {
             throw new LoginFailedException("Invalid username or password");
         }
 
+        // save refresh token in the database
+        $refreshToken = $this->tokenService->issueRefreshToken();
+        $user->setRefreshToken($refreshToken->getRefreshToken());
+        $user->setRefreshTokenExpiresAt(date('Y-m-d H:i:s', $refreshToken->getExpiresIn()));
+
+        $this->userRepository->update($user);
+
         return $this->tokenService->issueAccessToken($user->id, $user->role);
+    }
+
+    public function logout(string $authHeader): bool {
+        $token = str_replace('Bearer ', '', $authHeader);
+
+        $payload = $this->tokenService->decodeAccessToken($token);
+
+        $userId = $payload->sub;
+
+        $user = $this->userRepository->findById($userId);
+
+        if (!$user) 
+            throw new Exception();
+
+        $user->setRefreshTokenExpiresAt(null);
+        $user->setRefreshToken(null);
+
+        $this->userRepository->update($user);
+        return true;
     }
 }
 

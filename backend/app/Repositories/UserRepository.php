@@ -26,6 +26,10 @@ class UserRepository {
 
         return $this->userModel->getInsertID();
     }
+
+    public function update(User $user): bool {
+        return $this->userModel->save($user);
+    }
 }
 
 ?>
